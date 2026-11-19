@@ -17,8 +17,8 @@ STATE_BLOCKED = 0  # < 15 cm
 STATE_NEAR = 1     # 15 - 35 cm
 STATE_CLEAR = 2    # > 35 cm
 
-DIST_BLOCKED_THRESH = 15.0  # cm
-DIST_NEAR_THRESH = 35.0     # cm
+DIST_BLOCKED_THRESH = 18.0  # cm (gives braking distance for motor inertia)
+DIST_NEAR_THRESH = 40.0     # cm (starts gentle curving earlier)
 MAX_SENSOR_RANGE = 200.0    # cm
 
 # 4 Cardinal directions layout: [UP, DOWN, LEFT, RIGHT]

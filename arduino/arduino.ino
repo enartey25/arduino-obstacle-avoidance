@@ -1,8 +1,7 @@
 // =============================================================================
-// AUTONOMOUS RL CAR - 4-DIRECTION ARDUINO UNO FIRMWARE
-// Movements: UP (Forward), DOWN (Backward), LEFT, RIGHT
-// Sensors:   S0=UP (Front), S1=DOWN (Back), S2=LEFT, S3=RIGHT
-// Memory:    81 bytes Flash (PROGMEM), 0 bytes SRAM
+// AUTONOMOUS RL CAR - CONTINUOUS-LIKE SMOOTH ARDUINO UNO FIRMWARE
+// 7-Action Policy with Proportional Speed Scaling & Slew-Rate Smoothing
+// Memory: 81 bytes Flash (PROGMEM), 0 bytes SRAM
 // =============================================================================
 
 #include <Arduino.h>
@@ -11,15 +10,20 @@
 #include "ultrasonic.h"
 
 #define TELEMETRY_INTERVAL_MS 150
+#define MOTOR_SMOOTH_INTERVAL_MS 20
 
 static uint16_t distances[NUM_SENSORS];
 static unsigned long last_telemetry_time = 0;
+static unsigned long last_smooth_time = 0;
 
 const char* ACTION_TEXT[] = {
-    "UP (FORWARD)",
-    "DOWN (BACKWARD)",
-    "LEFT",
-    "RIGHT"
+    "FORWARD_FAST",
+    "FORWARD_SLOW",
+    "CURVE_LEFT",
+    "CURVE_RIGHT",
+    "SPIN_LEFT",
+    "SPIN_RIGHT",
+    "REVERSE"
 };
 
 void runHardwareSelfTest() {
@@ -34,9 +38,12 @@ void runHardwareSelfTest() {
     Serial.print(F(", RIGHT="));
     Serial.println(distances[3]);
 
-    Serial.println(F("Testing motors: Forward pulse (400ms)..."));
-    setMotorSpeeds(PWM_FORWARD, PWM_FORWARD);
-    delay(400);
+    Serial.println(F("Testing motors: Smooth forward ramp (400ms)..."));
+    setTargetAction(ACTION_FORWARD_SLOW, 100);
+    for (int i = 0; i < 20; i++) {
+        updateMotorSmoothing();
+        delay(20);
+    }
     emergencyBrake();
 
     Serial.println(F("Autonomous mode begins in 2 seconds..."));
@@ -48,10 +55,9 @@ void setup() {
     while (!Serial && millis() < 3000);
 
     Serial.println(F("=================================================="));
-    Serial.println(F(" Autonomous RL Car - 4-Direction Q-Learning       "));
-    Serial.println(F(" Microcontroller: Arduino Uno (ATmega328P)        "));
-    Serial.println(F(" Movements: UP, DOWN, LEFT, RIGHT                 "));
-    Serial.println(F(" Memory: 81 bytes Flash (PROGMEM), 0 bytes SRAM   "));
+    Serial.println(F(" Autonomous RL Car - Continuous-Like Navigation   "));
+    Serial.println(F(" Features: Variable Speeds & Slew-Rate Smoothing  "));
+    Serial.println(F(" Flash Policy: 81 bytes | RAM: 0 bytes            "));
     Serial.println(F("=================================================="));
 
     initMotors();
@@ -68,25 +74,25 @@ void loop() {
     uint16_t d_left  = distances[2];
     uint16_t d_right = distances[3];
 
-    // 2. INDEPENDENT HARDWARE SAFETY OVERRIDE
-    // If obstacle is dangerously close in front (<10cm):
+    // 2. INDEPENDENT HARDWARE SAFETY OVERRIDE (<10cm)
     if (d_up < DIST_EMERGENCY_STOP_CM) {
         Serial.println(F("[SAFETY OVERRIDE] Critical frontal proximity (<10cm)!"));
         emergencyBrake();
         delay(30);
 
-        // If rear is clear, reverse away immediately
         if (d_down > DIST_BLOCKED_THRESH_CM) {
-            setMotorSpeeds(-PWM_BACKWARD, -PWM_BACKWARD);
-            delay(250);
-        } else {
-            // Rear is blocked too -> emergency spin pivot towards more open side
-            if (d_left > d_right) {
-                setMotorSpeeds(-PWM_SPIN, PWM_SPIN);
-            } else {
-                setMotorSpeeds(PWM_SPIN, -PWM_SPIN);
+            setTargetAction(ACTION_REVERSE, d_up);
+            for (int i = 0; i < 12; i++) {
+                updateMotorSmoothing();
+                delay(20);
             }
-            delay(300);
+        } else {
+            uint8_t spin_act = (d_left > d_right) ? ACTION_SPIN_LEFT : ACTION_SPIN_RIGHT;
+            setTargetAction(spin_act, d_up);
+            for (int i = 0; i < 15; i++) {
+                updateMotorSmoothing();
+                delay(20);
+            }
         }
         emergencyBrake();
         return;
@@ -104,8 +110,14 @@ void loop() {
     // 5. Query optimal action from Flash Memory (PROGMEM)
     uint8_t action = get_policy_action(state_id);
 
-    // 6. Actuate L298N motors
-    executeAction(action);
+    // 6. Set target motor speeds with dynamic proportional speed scaling
+    setTargetAction(action, d_up);
+
+    // High frequency motor smoothing execution (smooth continuous gliding)
+    for (int k = 0; k < 5; k++) {
+        updateMotorSmoothing();
+        delay(10);
+    }
 
     // 7. Non-blocking Serial Telemetry
     unsigned long current_time = millis();

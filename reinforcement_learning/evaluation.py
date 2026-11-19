@@ -1,5 +1,5 @@
 """
-Evaluation benchmark for 4-direction trained Q-Learning policy (UP, DOWN, LEFT, RIGHT).
+Evaluation benchmark for continuous-like smooth Q-Learning policy (7 Actions).
 """
 
 import os
@@ -36,7 +36,7 @@ def evaluate_policy(agent: QLearningAgent = None,
     total_rewards = []
     survival_steps = []
     collisions = []
-    action_counts = np.zeros(4, dtype=np.int32)
+    action_counts = np.zeros(7, dtype=np.int32)
 
     print("=" * 65)
     print(f"Running Deterministic Evaluation ({num_test_episodes} test episodes)")
@@ -86,7 +86,10 @@ def evaluate_policy(agent: QLearningAgent = None,
     print(f"  Mean Steps Survived:         {mean_steps:.1f} / {max_steps}")
     print(f"  Mean Episode Reward:         {mean_reward:.1f}")
     print(f"  Action Distribution:")
-    action_labels = ["UP (FORWARD)", "DOWN (BACKWARD)", "LEFT", "RIGHT"]
+    action_labels = [
+        "FORWARD_FAST", "FORWARD_SLOW", "CURVE_LEFT", "CURVE_RIGHT",
+        "SPIN_LEFT", "SPIN_RIGHT", "REVERSE"
+    ]
     total_actions = sum(action_counts)
     for act_idx, act_name in enumerate(action_labels):
         pct = (action_counts[act_idx] / total_actions) * 100.0 if total_actions > 0 else 0

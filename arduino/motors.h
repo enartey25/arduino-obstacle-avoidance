@@ -11,15 +11,21 @@
 #define PIN_IN3  9   // Direction Right 1
 #define PIN_IN4  10  // Direction Right 2
 
-// Calibrated PWM Speed Constants (0 - 255)
-#define PWM_FORWARD    210  // Cruising forward
-#define PWM_BACKWARD   180  // Reversing
-#define PWM_SPIN       160  // Pivot spin
+// Base Calibrated Speeds
+#define PWM_FAST       225  // High-speed sprint
+#define PWM_SLOW       135  // Cautious glide
+#define PWM_ARC_OUTER  210  // Outer wheel on sweeping curves
+#define PWM_ARC_INNER  105  // Inner wheel on sweeping curves
+#define PWM_SPIN       150  // Tight pivot
+#define PWM_REVERSE    155  // Smooth reverse
+
+// Slew-rate interpolation coefficient (0.0 to 1.0; 0.25 = smooth continuous glide)
+#define SLEW_RATE_COEFF 0.25f
 
 void initMotors();
-void setMotorSpeeds(int left_speed, int right_speed);
-void executeAction(uint8_t action);
+void setRawMotorPWM(int left_pwm, int right_pwm);
+void setTargetAction(uint8_t action, uint16_t dist_up);
+void updateMotorSmoothing();
 void emergencyBrake();
-void emergencyReverse(uint16_t duration_ms);
 
 #endif // MOTORS_H

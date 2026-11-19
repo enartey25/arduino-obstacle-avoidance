@@ -1,27 +1,29 @@
 // =============================================================================
 // AUTONOMOUS RL CAR - COMPLETE ALL-IN-ONE ARDUINO UNO FIRMWARE
-// 4-Direction Q-Learning Policy Navigation with Hardware Safety Reflex
-// Target: Arduino Uno (ATmega328P, 16 MHz) + L298N + 4x HC-SR04
+// Continuous-Like Smooth Motion with 7 Actions & Variable Motor Speeds
 // Memory: 81 bytes Flash (PROGMEM), 0 bytes SRAM
 // =============================================================================
 
 #include <Arduino.h>
 #include <avr/pgmspace.h>
 
-// Action Definitions
-#define ACTION_UP     0  // Move UP (Forward)
-#define ACTION_DOWN   1  // Move DOWN (Backward / Reverse)
-#define ACTION_LEFT   2  // Move LEFT (Spin turn left)
-#define ACTION_RIGHT  3  // Move RIGHT (Spin turn right)
+// 7 Smooth Action Definitions
+#define ACTION_FORWARD_FAST 0  // Fast forward sprint in open space
+#define ACTION_FORWARD_SLOW 1  // Cautious forward glide near obstacles
+#define ACTION_CURVE_LEFT   2  // Smooth sweeping left arc (continuous turn)
+#define ACTION_CURVE_RIGHT  3  // Smooth sweeping right arc (continuous turn)
+#define ACTION_SPIN_LEFT    4  // In-place pivot left (for tight obstacles)
+#define ACTION_SPIN_RIGHT   5  // In-place pivot right (for tight obstacles)
+#define ACTION_REVERSE      6  // Smooth reverse
 
 // Sensor Distance Categories
-#define SENSOR_BLOCKED  0  // < 15 cm
-#define SENSOR_NEAR     1  // 15 - 35 cm
-#define SENSOR_CLEAR    2  // > 35 cm
+#define SENSOR_BLOCKED  0  // < 18 cm
+#define SENSOR_NEAR     1  // 18 - 40 cm
+#define SENSOR_CLEAR    2  // > 40 cm
 
-#define DIST_BLOCKED_THRESH_CM  15
-#define DIST_NEAR_THRESH_CM     35
-#define DIST_EMERGENCY_STOP_CM  10
+#define DIST_BLOCKED_THRESH_CM  18
+#define DIST_NEAR_THRESH_CM     40
+#define DIST_EMERGENCY_STOP_CM  12
 
 // L298N Motor Driver Pins
 #define PIN_ENA  5   // Timer0 PWM Left
@@ -31,10 +33,15 @@
 #define PIN_IN3  9   // Direction Right 1
 #define PIN_IN4  10  // Direction Right 2
 
-// Motor Speeds (0 - 255 PWM)
-#define PWM_FORWARD    210
-#define PWM_BACKWARD   180
-#define PWM_SPIN       160
+// Base Calibrated Speeds
+#define PWM_FAST       225
+#define PWM_SLOW       135
+#define PWM_ARC_OUTER  210
+#define PWM_ARC_INNER  105
+#define PWM_SPIN       150
+#define PWM_REVERSE    155
+
+#define SLEW_RATE_COEFF 0.25f
 
 // 4 Ultrasonic Sensor Pins (HC-SR04)
 #define PIN_TRIG_UP     2
@@ -51,60 +58,59 @@
 
 // 81-Byte Policy Array in Flash Memory (PROGMEM)
 const uint8_t PROGMEM Q_POLICY[81] = {
-    3, 3, 3, 3, 3, 3, 2, 2, 3,  // States 0..8
-    3, 3, 3, 3, 3, 1, 2, 1, 3,  // States 9..17
-    1, 1, 2, 1, 1, 1, 2, 2, 1,  // States 18..26
-    3, 3, 3, 3, 3, 3, 2, 2, 2,  // States 27..35
-    3, 3, 3, 3, 2, 3, 1, 3, 3,  // States 36..44
-    1, 1, 3, 2, 3, 3, 2, 3, 2,  // States 45..53
+    5, 5, 5, 4, 5, 5, 4, 4, 1,  // States 0..8
+    5, 5, 4, 5, 5, 4, 6, 5, 4,  // States 9..17
+    6, 6, 6, 6, 6, 6, 4, 6, 6,  // States 18..26
+    5, 5, 5, 5, 5, 5, 4, 4, 4,  // States 27..35
+    5, 5, 4, 5, 4, 5, 4, 6, 4,  // States 36..44
+    3, 6, 4, 3, 3, 3, 2, 4, 3,  // States 45..53
     0, 0, 0, 0, 0, 0, 0, 0, 0,  // States 54..62
-    0, 0, 3, 0, 0, 0, 2, 0, 0,  // States 63..71
-    1, 3, 1, 2, 1, 1, 1, 0, 0   // States 72..80
+    0, 0, 3, 0, 0, 0, 0, 0, 0,  // States 63..71
+    3, 3, 3, 3, 3, 3, 2, 3, 0   // States 72..80
 };
 
 const char* ACTION_TEXT[] = {
-    "UP (FORWARD)",
-    "DOWN (BACKWARD)",
-    "LEFT",
-    "RIGHT"
+    "FORWARD_FAST",
+    "FORWARD_SLOW",
+    "CURVE_LEFT",
+    "CURVE_RIGHT",
+    "SPIN_LEFT",
+    "SPIN_RIGHT",
+    "REVERSE"
 };
 
 static uint16_t distances[4];
 static unsigned long last_telemetry_time = 0;
 
-// Motor Control Helpers
-void brake() {
-    digitalWrite(PIN_IN1, LOW);
-    digitalWrite(PIN_IN2, LOW);
-    digitalWrite(PIN_IN3, LOW);
-    digitalWrite(PIN_IN4, LOW);
-    analogWrite(PIN_ENA, 0);
-    analogWrite(PIN_ENB, 0);
-}
+static float target_left_speed = 0.0f;
+static float target_right_speed = 0.0f;
+static float current_left_speed = 0.0f;
+static float current_right_speed = 0.0f;
 
-void setMotorSpeeds(int left_speed, int right_speed) {
-    if (left_speed > 0) {
+// Motor Control Helpers
+void setRawMotorPWM(int left_pwm, int right_pwm) {
+    if (left_pwm > 0) {
         digitalWrite(PIN_IN1, HIGH);
         digitalWrite(PIN_IN2, LOW);
-        analogWrite(PIN_ENA, constrain(left_speed, 0, 255));
-    } else if (left_speed < 0) {
+        analogWrite(PIN_ENA, constrain(left_pwm, 0, 255));
+    } else if (left_pwm < 0) {
         digitalWrite(PIN_IN1, LOW);
         digitalWrite(PIN_IN2, HIGH);
-        analogWrite(PIN_ENA, constrain(-left_speed, 0, 255));
+        analogWrite(PIN_ENA, constrain(-left_pwm, 0, 255));
     } else {
         digitalWrite(PIN_IN1, LOW);
         digitalWrite(PIN_IN2, LOW);
         analogWrite(PIN_ENA, 0);
     }
 
-    if (right_speed > 0) {
+    if (right_pwm > 0) {
         digitalWrite(PIN_IN3, HIGH);
         digitalWrite(PIN_IN4, LOW);
-        analogWrite(PIN_ENB, constrain(right_speed, 0, 255));
-    } else if (right_speed < 0) {
+        analogWrite(PIN_ENB, constrain(right_pwm, 0, 255));
+    } else if (right_pwm < 0) {
         digitalWrite(PIN_IN3, LOW);
         digitalWrite(PIN_IN4, HIGH);
-        analogWrite(PIN_ENB, constrain(-right_speed, 0, 255));
+        analogWrite(PIN_ENB, constrain(-right_pwm, 0, 255));
     } else {
         digitalWrite(PIN_IN3, LOW);
         digitalWrite(PIN_IN4, LOW);
@@ -112,24 +118,70 @@ void setMotorSpeeds(int left_speed, int right_speed) {
     }
 }
 
-void executeAction(uint8_t action) {
+void brake() {
+    target_left_speed   = 0.0f;
+    target_right_speed  = 0.0f;
+    current_left_speed  = 0.0f;
+    current_right_speed = 0.0f;
+    setRawMotorPWM(0, 0);
+}
+
+void setTargetAction(uint8_t action, uint16_t dist_up) {
+    // Proportional Continuous Speed Scaling
+    float speed_factor = 1.0f;
+    if (dist_up > 70) {
+        speed_factor = 1.10f; // Boost speed in open field
+    } else if (dist_up < 40 && dist_up > 18) {
+        speed_factor = 0.85f; // Automatically ease throttle down as obstacle nears
+    }
+
     switch (action) {
-        case ACTION_UP:
-            setMotorSpeeds(PWM_FORWARD, PWM_FORWARD);
+        case ACTION_FORWARD_FAST:
+            target_left_speed  = PWM_FAST * speed_factor;
+            target_right_speed = PWM_FAST * speed_factor;
             break;
-        case ACTION_DOWN:
-            setMotorSpeeds(-PWM_BACKWARD, -PWM_BACKWARD);
+
+        case ACTION_FORWARD_SLOW:
+            target_left_speed  = PWM_SLOW;
+            target_right_speed = PWM_SLOW;
             break;
-        case ACTION_LEFT:
-            setMotorSpeeds(-PWM_SPIN, PWM_SPIN);
+
+        case ACTION_CURVE_LEFT:
+            target_left_speed  = PWM_ARC_INNER;
+            target_right_speed = PWM_ARC_OUTER * speed_factor;
             break;
-        case ACTION_RIGHT:
-            setMotorSpeeds(PWM_SPIN, -PWM_SPIN);
+
+        case ACTION_CURVE_RIGHT:
+            target_left_speed  = PWM_ARC_OUTER * speed_factor;
+            target_right_speed = PWM_ARC_INNER;
             break;
+
+        case ACTION_SPIN_LEFT:
+            target_left_speed  = -PWM_SPIN;
+            target_right_speed =  PWM_SPIN;
+            break;
+
+        case ACTION_SPIN_RIGHT:
+            target_left_speed  =  PWM_SPIN;
+            target_right_speed = -PWM_SPIN;
+            break;
+
+        case ACTION_REVERSE:
+            target_left_speed  = -PWM_REVERSE;
+            target_right_speed = -PWM_REVERSE;
+            break;
+
         default:
-            brake();
+            target_left_speed  = 0.0f;
+            target_right_speed = 0.0f;
             break;
     }
+}
+
+void updateMotorSmoothing() {
+    current_left_speed  += (target_left_speed  - current_left_speed)  * SLEW_RATE_COEFF;
+    current_right_speed += (target_right_speed - current_right_speed) * SLEW_RATE_COEFF;
+    setRawMotorPWM((int)current_left_speed, (int)current_right_speed);
 }
 
 // Ultrasonic Sensor Helpers
@@ -157,7 +209,6 @@ void readAllSensors() {
     delay(10);
 }
 
-// State Discretizer and Encoder
 uint8_t discretize(uint16_t dist_cm) {
     if (dist_cm < DIST_BLOCKED_THRESH_CM) return SENSOR_BLOCKED;
     if (dist_cm <= DIST_NEAR_THRESH_CM)    return SENSOR_NEAR;
@@ -169,7 +220,7 @@ uint8_t encodeState(uint8_t s_up, uint8_t s_down, uint8_t s_left, uint8_t s_righ
 }
 
 uint8_t getPolicyAction(uint8_t state_id) {
-    if (state_id >= 81) return ACTION_RIGHT;
+    if (state_id >= 81) return ACTION_SPIN_RIGHT;
     return pgm_read_byte(&(Q_POLICY[state_id]));
 }
 
@@ -178,8 +229,8 @@ void setup() {
     while (!Serial && millis() < 3000);
 
     Serial.println(F("=================================================="));
-    Serial.println(F(" Autonomous RL Car - Single File Firmware         "));
-    Serial.println(F(" Flash Policy: 81 bytes | RAM: 0 bytes            "));
+    Serial.println(F(" Autonomous RL Car - Continuous-Like Navigation   "));
+    Serial.println(F(" Variable Speeds & Slew-Rate Acceleration Filter  "));
     Serial.println(F("=================================================="));
 
     pinMode(PIN_ENA, OUTPUT);
@@ -199,7 +250,6 @@ void setup() {
     pinMode(PIN_TRIG_RIGHT, OUTPUT);
     pinMode(PIN_ECHO_RIGHT, INPUT);
 
-    // Initial check and brief motor pulse
     readAllSensors();
     Serial.print(F("Initial distances: UP="));
     Serial.print(distances[0]);
@@ -210,9 +260,12 @@ void setup() {
     Serial.print(F(" RIGHT="));
     Serial.println(distances[3]);
 
-    Serial.println(F("Motor pulse test (400ms)..."));
-    setMotorSpeeds(PWM_FORWARD, PWM_FORWARD);
-    delay(400);
+    Serial.println(F("Testing motors: Smooth forward ramp (400ms)..."));
+    setTargetAction(ACTION_FORWARD_SLOW, 100);
+    for (int i = 0; i < 20; i++) {
+        updateMotorSmoothing();
+        delay(20);
+    }
     brake();
 
     Serial.println(F("Autonomous mode begins in 2 seconds..."));
@@ -227,17 +280,25 @@ void loop() {
     uint16_t d_left  = distances[2];
     uint16_t d_right = distances[3];
 
-    // 2. Hardware Safety Override
+    // 2. Hardware Safety Override (<12cm)
     if (d_up < DIST_EMERGENCY_STOP_CM) {
-        Serial.println(F("[SAFETY OVERRIDE] Critical frontal proximity (<10cm)!"));
+        Serial.println(F("[SAFETY OVERRIDE] Critical frontal proximity (<12cm)!"));
         brake();
+        delay(30);
+
         if (d_down > DIST_BLOCKED_THRESH_CM) {
-            setMotorSpeeds(-PWM_BACKWARD, -PWM_BACKWARD);
-            delay(250);
+            setTargetAction(ACTION_REVERSE, d_up);
+            for (int i = 0; i < 12; i++) {
+                updateMotorSmoothing();
+                delay(20);
+            }
         } else {
-            setMotorSpeeds((d_left > d_right) ? -PWM_SPIN : PWM_SPIN,
-                           (d_left > d_right) ?  PWM_SPIN : -PWM_SPIN);
-            delay(300);
+            uint8_t spin_act = (d_left > d_right) ? ACTION_SPIN_LEFT : ACTION_SPIN_RIGHT;
+            setTargetAction(spin_act, d_up);
+            for (int i = 0; i < 15; i++) {
+                updateMotorSmoothing();
+                delay(20);
+            }
         }
         brake();
         return;
@@ -255,8 +316,14 @@ void loop() {
     // 5. Flash policy query
     uint8_t action = getPolicyAction(state_id);
 
-    // 6. Motor drive
-    executeAction(action);
+    // 6. Set target motor speeds with dynamic proportional scaling
+    setTargetAction(action, d_up);
+
+    // Smooth motor update loop
+    for (int k = 0; k < 5; k++) {
+        updateMotorSmoothing();
+        delay(10);
+    }
 
     // 7. Live Serial Telemetry
     unsigned long now = millis();
@@ -276,4 +343,3 @@ void loop() {
         Serial.println(ACTION_TEXT[action]);
     }
 }
-
