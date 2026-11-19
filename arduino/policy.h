@@ -1,0 +1,137 @@
+// =============================================================================
+// AUTONOMOUS RL CAR - 4-DIRECTION POLICY HEADER (AUTO-GENERATED)
+// Movements: UP (Forward), DOWN (Backward), LEFT, RIGHT
+// Sensors:   S0=UP (Front), S1=DOWN (Back), S2=LEFT, S3=RIGHT
+// Stored in PROGMEM flash memory (0 bytes of SRAM used)
+// =============================================================================
+
+#ifndef POLICY_H
+#define POLICY_H
+
+#include <Arduino.h>
+#include <avr/pgmspace.h>
+
+// 4 Movement Actions
+#define ACTION_UP     0  // Move UP (Forward)
+#define ACTION_DOWN   1  // Move DOWN (Backward / Reverse)
+#define ACTION_LEFT   2  // Move LEFT (Spin / Turn Left)
+#define ACTION_RIGHT  3  // Move RIGHT (Spin / Turn Right)
+
+// Sensor Distance Categories
+#define SENSOR_BLOCKED  0  // < 15 cm
+#define SENSOR_NEAR     1  // 15 - 35 cm
+#define SENSOR_CLEAR    2  // > 35 cm
+
+// Physical Sensor Thresholds (cm)
+#define DIST_BLOCKED_THRESH_CM  15
+#define DIST_NEAR_THRESH_CM     35
+#define DIST_EMERGENCY_STOP_CM  10
+
+// 81-Byte Policy Array in Flash Memory (PROGMEM)
+const uint8_t PROGMEM Q_POLICY[81] = {
+    3,  // State  0: UP=BLOCKED DOWN=BLOCKED LEFT=BLOCKED RIGHT=BLOCKED -> ACTION_RIGHT
+    3,  // State  1: UP=BLOCKED DOWN=BLOCKED LEFT=BLOCKED RIGHT=NEAR    -> ACTION_RIGHT
+    3,  // State  2: UP=BLOCKED DOWN=BLOCKED LEFT=BLOCKED RIGHT=CLEAR   -> ACTION_RIGHT
+    3,  // State  3: UP=BLOCKED DOWN=BLOCKED LEFT=NEAR    RIGHT=BLOCKED -> ACTION_RIGHT
+    3,  // State  4: UP=BLOCKED DOWN=BLOCKED LEFT=NEAR    RIGHT=NEAR    -> ACTION_RIGHT
+    3,  // State  5: UP=BLOCKED DOWN=BLOCKED LEFT=NEAR    RIGHT=CLEAR   -> ACTION_RIGHT
+    2,  // State  6: UP=BLOCKED DOWN=BLOCKED LEFT=CLEAR   RIGHT=BLOCKED -> ACTION_LEFT
+    2,  // State  7: UP=BLOCKED DOWN=BLOCKED LEFT=CLEAR   RIGHT=NEAR    -> ACTION_LEFT
+    2,  // State  8: UP=BLOCKED DOWN=BLOCKED LEFT=CLEAR   RIGHT=CLEAR   -> ACTION_LEFT
+    3,  // State  9: UP=BLOCKED DOWN=NEAR    LEFT=BLOCKED RIGHT=BLOCKED -> ACTION_RIGHT
+    3,  // State 10: UP=BLOCKED DOWN=NEAR    LEFT=BLOCKED RIGHT=NEAR    -> ACTION_RIGHT
+    3,  // State 11: UP=BLOCKED DOWN=NEAR    LEFT=BLOCKED RIGHT=CLEAR   -> ACTION_RIGHT
+    3,  // State 12: UP=BLOCKED DOWN=NEAR    LEFT=NEAR    RIGHT=BLOCKED -> ACTION_RIGHT
+    3,  // State 13: UP=BLOCKED DOWN=NEAR    LEFT=NEAR    RIGHT=NEAR    -> ACTION_RIGHT
+    3,  // State 14: UP=BLOCKED DOWN=NEAR    LEFT=NEAR    RIGHT=CLEAR   -> ACTION_RIGHT
+    2,  // State 15: UP=BLOCKED DOWN=NEAR    LEFT=CLEAR   RIGHT=BLOCKED -> ACTION_LEFT
+    0,  // State 16: UP=BLOCKED DOWN=NEAR    LEFT=CLEAR   RIGHT=NEAR    -> ACTION_UP
+    2,  // State 17: UP=BLOCKED DOWN=NEAR    LEFT=CLEAR   RIGHT=CLEAR   -> ACTION_LEFT
+    1,  // State 18: UP=BLOCKED DOWN=CLEAR   LEFT=BLOCKED RIGHT=BLOCKED -> ACTION_DOWN
+    1,  // State 19: UP=BLOCKED DOWN=CLEAR   LEFT=BLOCKED RIGHT=NEAR    -> ACTION_DOWN
+    2,  // State 20: UP=BLOCKED DOWN=CLEAR   LEFT=BLOCKED RIGHT=CLEAR   -> ACTION_LEFT
+    1,  // State 21: UP=BLOCKED DOWN=CLEAR   LEFT=NEAR    RIGHT=BLOCKED -> ACTION_DOWN
+    2,  // State 22: UP=BLOCKED DOWN=CLEAR   LEFT=NEAR    RIGHT=NEAR    -> ACTION_LEFT
+    1,  // State 23: UP=BLOCKED DOWN=CLEAR   LEFT=NEAR    RIGHT=CLEAR   -> ACTION_DOWN
+    1,  // State 24: UP=BLOCKED DOWN=CLEAR   LEFT=CLEAR   RIGHT=BLOCKED -> ACTION_DOWN
+    1,  // State 25: UP=BLOCKED DOWN=CLEAR   LEFT=CLEAR   RIGHT=NEAR    -> ACTION_DOWN
+    1,  // State 26: UP=BLOCKED DOWN=CLEAR   LEFT=CLEAR   RIGHT=CLEAR   -> ACTION_DOWN
+    3,  // State 27: UP=NEAR    DOWN=BLOCKED LEFT=BLOCKED RIGHT=BLOCKED -> ACTION_RIGHT
+    3,  // State 28: UP=NEAR    DOWN=BLOCKED LEFT=BLOCKED RIGHT=NEAR    -> ACTION_RIGHT
+    3,  // State 29: UP=NEAR    DOWN=BLOCKED LEFT=BLOCKED RIGHT=CLEAR   -> ACTION_RIGHT
+    3,  // State 30: UP=NEAR    DOWN=BLOCKED LEFT=NEAR    RIGHT=BLOCKED -> ACTION_RIGHT
+    3,  // State 31: UP=NEAR    DOWN=BLOCKED LEFT=NEAR    RIGHT=NEAR    -> ACTION_RIGHT
+    3,  // State 32: UP=NEAR    DOWN=BLOCKED LEFT=NEAR    RIGHT=CLEAR   -> ACTION_RIGHT
+    2,  // State 33: UP=NEAR    DOWN=BLOCKED LEFT=CLEAR   RIGHT=BLOCKED -> ACTION_LEFT
+    2,  // State 34: UP=NEAR    DOWN=BLOCKED LEFT=CLEAR   RIGHT=NEAR    -> ACTION_LEFT
+    2,  // State 35: UP=NEAR    DOWN=BLOCKED LEFT=CLEAR   RIGHT=CLEAR   -> ACTION_LEFT
+    3,  // State 36: UP=NEAR    DOWN=NEAR    LEFT=BLOCKED RIGHT=BLOCKED -> ACTION_RIGHT
+    3,  // State 37: UP=NEAR    DOWN=NEAR    LEFT=BLOCKED RIGHT=NEAR    -> ACTION_RIGHT
+    1,  // State 38: UP=NEAR    DOWN=NEAR    LEFT=BLOCKED RIGHT=CLEAR   -> ACTION_DOWN
+    3,  // State 39: UP=NEAR    DOWN=NEAR    LEFT=NEAR    RIGHT=BLOCKED -> ACTION_RIGHT
+    3,  // State 40: UP=NEAR    DOWN=NEAR    LEFT=NEAR    RIGHT=NEAR    -> ACTION_RIGHT
+    2,  // State 41: UP=NEAR    DOWN=NEAR    LEFT=NEAR    RIGHT=CLEAR   -> ACTION_LEFT
+    3,  // State 42: UP=NEAR    DOWN=NEAR    LEFT=CLEAR   RIGHT=BLOCKED -> ACTION_RIGHT
+    2,  // State 43: UP=NEAR    DOWN=NEAR    LEFT=CLEAR   RIGHT=NEAR    -> ACTION_LEFT
+    2,  // State 44: UP=NEAR    DOWN=NEAR    LEFT=CLEAR   RIGHT=CLEAR   -> ACTION_LEFT
+    1,  // State 45: UP=NEAR    DOWN=CLEAR   LEFT=BLOCKED RIGHT=BLOCKED -> ACTION_DOWN
+    1,  // State 46: UP=NEAR    DOWN=CLEAR   LEFT=BLOCKED RIGHT=NEAR    -> ACTION_DOWN
+    3,  // State 47: UP=NEAR    DOWN=CLEAR   LEFT=BLOCKED RIGHT=CLEAR   -> ACTION_RIGHT
+    1,  // State 48: UP=NEAR    DOWN=CLEAR   LEFT=NEAR    RIGHT=BLOCKED -> ACTION_DOWN
+    2,  // State 49: UP=NEAR    DOWN=CLEAR   LEFT=NEAR    RIGHT=NEAR    -> ACTION_LEFT
+    0,  // State 50: UP=NEAR    DOWN=CLEAR   LEFT=NEAR    RIGHT=CLEAR   -> ACTION_UP
+    1,  // State 51: UP=NEAR    DOWN=CLEAR   LEFT=CLEAR   RIGHT=BLOCKED -> ACTION_DOWN
+    3,  // State 52: UP=NEAR    DOWN=CLEAR   LEFT=CLEAR   RIGHT=NEAR    -> ACTION_RIGHT
+    2,  // State 53: UP=NEAR    DOWN=CLEAR   LEFT=CLEAR   RIGHT=CLEAR   -> ACTION_LEFT
+    0,  // State 54: UP=CLEAR   DOWN=BLOCKED LEFT=BLOCKED RIGHT=BLOCKED -> ACTION_UP
+    0,  // State 55: UP=CLEAR   DOWN=BLOCKED LEFT=BLOCKED RIGHT=NEAR    -> ACTION_UP
+    0,  // State 56: UP=CLEAR   DOWN=BLOCKED LEFT=BLOCKED RIGHT=CLEAR   -> ACTION_UP
+    0,  // State 57: UP=CLEAR   DOWN=BLOCKED LEFT=NEAR    RIGHT=BLOCKED -> ACTION_UP
+    0,  // State 58: UP=CLEAR   DOWN=BLOCKED LEFT=NEAR    RIGHT=NEAR    -> ACTION_UP
+    0,  // State 59: UP=CLEAR   DOWN=BLOCKED LEFT=NEAR    RIGHT=CLEAR   -> ACTION_UP
+    2,  // State 60: UP=CLEAR   DOWN=BLOCKED LEFT=CLEAR   RIGHT=BLOCKED -> ACTION_LEFT
+    2,  // State 61: UP=CLEAR   DOWN=BLOCKED LEFT=CLEAR   RIGHT=NEAR    -> ACTION_LEFT
+    0,  // State 62: UP=CLEAR   DOWN=BLOCKED LEFT=CLEAR   RIGHT=CLEAR   -> ACTION_UP
+    0,  // State 63: UP=CLEAR   DOWN=NEAR    LEFT=BLOCKED RIGHT=BLOCKED -> ACTION_UP
+    0,  // State 64: UP=CLEAR   DOWN=NEAR    LEFT=BLOCKED RIGHT=NEAR    -> ACTION_UP
+    3,  // State 65: UP=CLEAR   DOWN=NEAR    LEFT=BLOCKED RIGHT=CLEAR   -> ACTION_RIGHT
+    0,  // State 66: UP=CLEAR   DOWN=NEAR    LEFT=NEAR    RIGHT=BLOCKED -> ACTION_UP
+    0,  // State 67: UP=CLEAR   DOWN=NEAR    LEFT=NEAR    RIGHT=NEAR    -> ACTION_UP
+    0,  // State 68: UP=CLEAR   DOWN=NEAR    LEFT=NEAR    RIGHT=CLEAR   -> ACTION_UP
+    3,  // State 69: UP=CLEAR   DOWN=NEAR    LEFT=CLEAR   RIGHT=BLOCKED -> ACTION_RIGHT
+    2,  // State 70: UP=CLEAR   DOWN=NEAR    LEFT=CLEAR   RIGHT=NEAR    -> ACTION_LEFT
+    0,  // State 71: UP=CLEAR   DOWN=NEAR    LEFT=CLEAR   RIGHT=CLEAR   -> ACTION_UP
+    2,  // State 72: UP=CLEAR   DOWN=CLEAR   LEFT=BLOCKED RIGHT=BLOCKED -> ACTION_LEFT
+    1,  // State 73: UP=CLEAR   DOWN=CLEAR   LEFT=BLOCKED RIGHT=NEAR    -> ACTION_DOWN
+    1,  // State 74: UP=CLEAR   DOWN=CLEAR   LEFT=BLOCKED RIGHT=CLEAR   -> ACTION_DOWN
+    2,  // State 75: UP=CLEAR   DOWN=CLEAR   LEFT=NEAR    RIGHT=BLOCKED -> ACTION_LEFT
+    0,  // State 76: UP=CLEAR   DOWN=CLEAR   LEFT=NEAR    RIGHT=NEAR    -> ACTION_UP
+    3,  // State 77: UP=CLEAR   DOWN=CLEAR   LEFT=NEAR    RIGHT=CLEAR   -> ACTION_RIGHT
+    2,  // State 78: UP=CLEAR   DOWN=CLEAR   LEFT=CLEAR   RIGHT=BLOCKED -> ACTION_LEFT
+    1,  // State 79: UP=CLEAR   DOWN=CLEAR   LEFT=CLEAR   RIGHT=NEAR    -> ACTION_DOWN
+    2   // State 80: UP=CLEAR   DOWN=CLEAR   LEFT=CLEAR   RIGHT=CLEAR   -> ACTION_LEFT
+};
+
+// Distance Category Discretizer
+inline uint8_t discretize_distance(uint16_t dist_cm) {
+    if (dist_cm == 0 || dist_cm < DIST_BLOCKED_THRESH_CM) {
+        return SENSOR_BLOCKED;
+    } else if (dist_cm <= DIST_NEAR_THRESH_CM) {
+        return SENSOR_NEAR;
+    } else {
+        return SENSOR_CLEAR;
+    }
+}
+
+// State Index Encoder: (s_up * 27) + (s_down * 9) + (s_left * 3) + s_right
+inline uint8_t encode_state(uint8_t s_up, uint8_t s_down, uint8_t s_left, uint8_t s_right) {
+    return (s_up * 27) + (s_down * 9) + (s_left * 3) + s_right;
+}
+
+// Policy Lookup from Flash Memory
+inline uint8_t get_policy_action(uint8_t state_id) {
+    if (state_id >= 81) return ACTION_RIGHT; // Safety fallback
+    return pgm_read_byte(&(Q_POLICY[state_id]));
+}
+
+#endif // POLICY_H
