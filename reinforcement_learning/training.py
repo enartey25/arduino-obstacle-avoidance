@@ -13,7 +13,7 @@ from simulation.environment import CarArenaEnv
 from simulation.sensors import PRESET_CARDINAL_4
 from reinforcement_learning.q_learning import QLearningAgent
 
-def train_agent(num_episodes: int = 2000,
+def train_agent(num_episodes: int = 3000,
                 max_steps_per_episode: int = 200,
                 results_dir: str = "results",
                 sensor_layout = None) -> QLearningAgent:
@@ -21,7 +21,7 @@ def train_agent(num_episodes: int = 2000,
 
     layout = sensor_layout if sensor_layout is not None else PRESET_CARDINAL_4
     env = CarArenaEnv(sensor_layout=layout, max_steps_per_episode=max_steps_per_episode)
-    agent = QLearningAgent(alpha=0.20, gamma=0.92, epsilon_start=1.0, epsilon_decay=0.997, epsilon_min=0.03)
+    agent = QLearningAgent(alpha=0.20, gamma=0.93, epsilon_start=1.0, epsilon_decay=0.998, epsilon_min=0.02)
 
     csv_path = os.path.join(results_dir, "training_rewards.csv")
     csv_file = open(csv_path, mode="w", newline="", encoding="utf-8")
@@ -66,7 +66,7 @@ def train_agent(num_episodes: int = 2000,
 
         writer.writerow([episode, round(total_reward, 2), info["step"], int(collided), round(agent.epsilon, 4)])
 
-        if episode % 200 == 0 or episode == num_episodes:
+        if episode % 300 == 0 or episode == num_episodes:
             csv_file.flush()
             recent_reward = np.mean(rewards_history[-100:])
             recent_steps = np.mean(steps_history[-100:])
@@ -80,12 +80,10 @@ def train_agent(num_episodes: int = 2000,
     print("-" * 65)
     print(f"Training completed in {elapsed:.2f} seconds ({num_episodes / elapsed:.1f} episodes/sec).")
 
-    # Save Q-table
     q_table_path = os.path.join(results_dir, "q_table.npy")
     agent.save(q_table_path)
     print(f"Q-table saved to: {q_table_path}")
 
-    # Plot learning curves
     plot_training_curves(rewards_history, steps_history, collisions_history, results_dir)
 
     return agent
@@ -98,7 +96,6 @@ def plot_training_curves(rewards, steps, collisions, results_dir):
         return np.convolve(arr, np.ones(w)/w, mode='valid')
 
     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 10), sharex=True)
-
     episodes = range(1, len(rewards) + 1)
 
     # 1. Rewards
@@ -139,4 +136,4 @@ def plot_training_curves(rewards, steps, collisions, results_dir):
 
 
 if __name__ == "__main__":
-    train_agent(num_episodes=2000)
+    train_agent(num_episodes=3000)
